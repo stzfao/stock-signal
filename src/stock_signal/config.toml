@@ -1,0 +1,38 @@
+# TOML configuration file for the app
+
+[schedule]
+staleness_days = 7
+
+[datastore]
+db_path = "data/stock_signal.duckdb"
+output_dir = "data/output"
+
+[fmp]
+base_url = "https://financialmodelingprep.com/stable"
+rpm = 300
+max_conn = 60
+
+[nyse]
+base_url = "https://www.nyse.com/api"
+
+[nyse.body]
+instrument_type = "EQUITY"
+sort_column = "NORMALIZED_TICKER"
+sort_order = "ASC"
+max_results_per_page = 6900
+page_number = 1
+filter_token = ""
+
+[nasdaq]
+base_url = "https://api.nasdaq.com/api/screener"
+table_only = true
+limit = 7000
+# TODO check limit once
+
+[slickcharts]
+base_url = "https://www.slickcharts.com"
+
+[stockanalysis]
+base_url = "https://stockanalysis.com"
+rpm = 30
+max_conn = 5

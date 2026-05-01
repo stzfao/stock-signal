@@ -8,14 +8,23 @@ import pandas as pd
 
 @dataclass
 class FactorWeights:
-    """Default weights for US-long track composite scoring."""
+    """Default weights for US-long track composite scoring.
 
-    momentum: float = 0.25
-    revisions: float = 0.25
-    sue: float = 0.15
-    fscore: float = 0.15
-    gross_profitability: float = 0.10
-    proximity_52wk_high: float = 0.10
+    Weights auto-normalize to sum to 1.0 across active factors.
+    """
+
+    # Tier 0 — original signals
+    momentum: float = 0.20
+    revisions: float = 0.20
+    sue: float = 0.12
+    fscore: float = 0.10
+    gross_profitability: float = 0.08
+    proximity_52wk_high: float = 0.08
+    # Tier 1 — new fundamental signals
+    accruals: float = 0.07
+    asset_growth: float = 0.05
+    net_issuance: float = 0.05
+    revenue_acceleration: float = 0.05
 
 
 def winsorize(s: pd.Series, lower: float = 0.01, upper: float = 0.99) -> pd.Series:
@@ -58,6 +67,10 @@ def composite_score(
         "fscore": weights.fscore,
         "gross_profitability": weights.gross_profitability,
         "proximity_52wk_high": weights.proximity_52wk_high,
+        "accruals": weights.accruals,
+        "asset_growth": weights.asset_growth,
+        "net_issuance": weights.net_issuance,
+        "revenue_acceleration": weights.revenue_acceleration,
     }
 
     # Align all factors to a common index
@@ -66,16 +79,26 @@ def composite_score(
         all_symbols.update(s.index)
     index = pd.Index(sorted(all_symbols))
 
+    # Normalize weights to sum to 1.0 across available factors only
+    active_weights = {
+        name: weight_map[name]
+        for name in factor_series
+        if name in weight_map and weight_map[name] > 0
+    }
+    total_weight = sum(active_weights.values())
+    if total_weight == 0:
+        return pd.Series(dtype=float)
+    normalized = {name: w / total_weight for name, w in active_weights.items()}
+
     composite = pd.Series(0.0, index=index)
 
     for name, raw in factor_series.items():
-        w = weight_map.get(name, 0.0)
+        w = normalized.get(name, 0.0)
         if w == 0:
             continue
         aligned = raw.reindex(index)
         winsorized = winsorize(aligned.dropna())
         zscored = cross_sectional_zscore(winsorized)
-        # Re-align after dropna
         composite = composite.add(zscored * w, fill_value=0.0)
 
     return composite

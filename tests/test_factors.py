@@ -2,11 +2,11 @@
 
 import pandas as pd
 
-from stock_signal.factors.fscore import piotroski_fscore
-from stock_signal.factors.momentum import momentum_12_1, proximity_52wk_high
-from stock_signal.factors.quality import gross_profitability
-from stock_signal.factors.revisions import eps_revision_breadth
-from stock_signal.factors.sue import sue
+from src.stock_signal.factors.fscore import piotroski_fscore
+from src.stock_signal.factors.momentum import momentum_12_1, proximity_52wk_high
+from src.stock_signal.factors.quality import gross_profitability
+from src.stock_signal.factors.revisions import eps_revision_breadth
+from src.stock_signal.factors.sue import sue
 
 
 class TestMomentum:

@@ -1,0 +1,25 @@
+{
+  "idk": {
+    "key": {
+      "ley": [
+        {
+          "symbol": "ZTR",
+          "name": "Virtus Total Return Fund Inc.",
+          "lastsale": "$6.93",
+          "netchange": "0.16",
+          "pctchange": "2.363%",
+          "marketCap": "NA",
+          "url": "/market-activity/stocks/ztr"
+        }
+      ]
+    },
+    "totalrecords": 6962,
+    "asof": "Last price as of Oct 6, 2026"
+  },
+  "message": null,
+  "status": {
+    "rCode": 200,
+    "bCodeMessage": null,
+    "developerMessage": null
+  }
+}

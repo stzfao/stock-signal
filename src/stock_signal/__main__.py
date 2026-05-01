@@ -3,26 +3,32 @@
 import argparse
 import asyncio
 import logging
-import sys
+from pathlib import Path
+
+from .config import Config, Scope
+from .pipeline import run_us_pipeline
+
+_DEFAULT_CONFIG = Path(__file__).parent / "config.toml"
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Stock Signal Engine")
-    parser.add_argument("--refresh", action="store_true", help="Force re-fetch all data")
     parser.add_argument(
-        "--symbols",
-        nargs="+",
-        help="Override universe with specific symbols (e.g., --symbols AAPL MSFT GOOGL)",
+        "--symbols", nargs="+",
+        help="Override universe with specific symbols (e.g. --symbols AAPL MSFT)",
     )
     parser.add_argument(
-        "--market",
-        default="us",
-        choices=["us"],
-        help="Market to run (default: us)",
+        "--scope", nargs="+",
+        default=[Scope.SP500.value],
+        choices=[s.value for s in Scope],
+        help="Universe scope (default: sp500)",
     )
     parser.add_argument(
-        "-v", "--verbose",
-        action="store_true",
+        "--config", default=str(_DEFAULT_CONFIG),
+        help="Path to config.toml (default: bundled config)",
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true",
         help="Enable debug logging",
     )
     args = parser.parse_args()
@@ -33,16 +39,13 @@ def main() -> None:
         datefmt="%H:%M:%S",
     )
 
-    from stock_signal.config import FMP_API_KEY
-
-    if not FMP_API_KEY:
-        print("Error: FMP_API_KEY not set. Copy .env.example to .env and add your key.", file=sys.stderr)
-        sys.exit(1)
-
-    from stock_signal.pipeline import run_us_pipeline
-
-    output = asyncio.run(run_us_pipeline(refresh=args.refresh, symbols=args.symbols))
-    print(f"Output: {output}")
+    config = Config.new(args.config)
+    out = asyncio.run(run_us_pipeline(
+        config=config,
+        scope=args.scope,
+        symbols=args.symbols,
+    ))
+    print(out)
 
 
 if __name__ == "__main__":

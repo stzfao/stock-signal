@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 
-from stock_signal.scoring import (
+from src.stock_signal.scoring import (
     composite_score,
     cross_sectional_zscore,
     rank_top_decile,
