@@ -20,3 +20,14 @@ data/output/
 # IDE
 .idea/
 .vscode/
+
+*.swp
+*.html
+SIGNALS.md
+TODO.md
+# scratch files for now
+docs/
+page_files/
+data/
+scripts/
+sources/
