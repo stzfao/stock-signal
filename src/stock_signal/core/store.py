@@ -122,7 +122,8 @@ class Store:
         )
         df["date"] = pd.to_datetime(df["date"]).dt.date
         keep = ["date", "open", "high", "low", "close", "adj_close", "volume"]
-        return self._upsert("prices", symbol, df[[c for c in keep if c in df.columns]])
+        df = df[[c for c in keep if c in df.columns]].drop_duplicates(subset=["date"], keep="last")
+        return self._upsert("prices", symbol, df)
 
     def upsert_financials(
         self, symbol: str, income: list[dict], balance: list[dict], cashflow: list[dict]

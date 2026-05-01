@@ -39,12 +39,13 @@ class Swarm:
                     sa_client.fetch_screener_data(self.targets)
                 )
 
+                ordered = sorted(self.targets)
                 fmp_results = await asyncio.gather(
-                    *[self._ingest_symbol(fmp_client, store, sym) for sym in self.targets],
+                    *[self._ingest_symbol(fmp_client, store, sym) for sym in ordered],
                     return_exceptions=True,
                 )
 
-                for sym, result in zip(sorted(self.targets), fmp_results):
+                for sym, result in zip(ordered, fmp_results):
                     if isinstance(result, Exception):
                         log.error("FMP ingest failed for %s: %s", sym, result)
                         errors[sym] = result

@@ -9,8 +9,8 @@ output_dir = "data/output"
 
 [fmp]
 base_url = "https://financialmodelingprep.com/stable"
-rpm = 300
-max_conn = 60
+rpm = 150
+max_conn = 10
 
 [nyse]
 base_url = "https://www.nyse.com/api"

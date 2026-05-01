@@ -96,7 +96,7 @@ async def run_us_pipeline(
     symbols_list = sorted(targets)
     with Store(config.datastore.db_path, config.schedule.staleness_days) as store:
         prices_df   = store.load_prices(symbols_list)
-        fin_df      = store.load_financials(symbols_list, period="annual")
+        fin_df      = store.load_financials(symbols_list, period="FY")
         earnings_df = store.load_earnings_surprises(symbols_list)
 
     # ------------------------------------------------------------------ #
