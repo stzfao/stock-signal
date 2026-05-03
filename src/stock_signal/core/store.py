@@ -3,9 +3,12 @@
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Tuple
 
 import duckdb
 import pandas as pd
+
+from ..config import Schedule
 
 _SQL_PATH = Path(__file__).parent.parent / "sql" / "queries.sql"
 
@@ -57,9 +60,10 @@ def _load_queries(path: Path) -> dict[str, str]:
 class Store:
     _queries: dict[str, str] = {}  # class-level cache, loaded once
 
-    def __init__(self, db_path: Path, staleness_days: int) -> None:
+    def __init__(self, db_path: Path, schedule: Schedule) -> None:
         self._db_path = db_path
-        self._staleness_days = staleness_days
+        self.fundamentals_staleness_days = schedule.fundamentals_staleness_days
+        self.price_staleness_hours = schedule.price_staleness_hours
         self._conn: duckdb.DuckDBPyConnection | None = None
         if not Store._queries:
             Store._queries = _load_queries(_SQL_PATH)
@@ -82,7 +86,8 @@ class Store:
         assert self._conn is not None, "Store used outside context manager"
         return self._conn
 
-    def _q(self, name: str, **fmt: str) -> str:
+    @staticmethod
+    def _q(name: str, **fmt: str) -> str:
         sql = Store._queries[name]
         return sql.format(**fmt) if fmt else sql
 
@@ -90,10 +95,13 @@ class Store:
     # Staleness                                                            #
     # ------------------------------------------------------------------ #
 
-    def is_stale(self, table: str, symbol: str) -> bool:
-        cutoff = datetime.now() - timedelta(days=self._staleness_days)
+    def is_stale(self, table: str, symbol: str) -> Tuple[bool, bool]:
+        fundamentals_cutoff = datetime.now() - timedelta(days=self.fundamentals_staleness_days)
+        prices_cutoff = datetime.now() - timedelta(hours=self.price_staleness_hours)
         row = self.conn.execute(self._q("stale-check", table=table), [symbol]).fetchone()
-        return row is None or row[0] is None or row[0] < cutoff
+        is_fundamental_stale =  row is None or row[0] is None or row[0] < fundamentals_cutoff
+        is_price_stale = row is None or row[0] is None or row[0] < prices_cutoff
+        return is_fundamental_stale, is_price_stale
 
     # ------------------------------------------------------------------ #
     # Upserts                                                              #
@@ -172,7 +180,8 @@ class Store:
             return 0
         df["date"] = pd.to_datetime(df["date"]).dt.date
         keep = ["date", "actual_earnings_result", "estimated_earnings"]
-        return self._upsert("earnings_surprises", symbol, df[[c for c in keep if c in df.columns]])
+        df = df[[c for c in keep if c in df.columns]].drop_duplicates(subset=["date"], keep="last")
+        return self._upsert("earnings_surprises", symbol, df)
 
     def upsert_analyst_estimates(self, symbol: str, rows: list[dict]) -> int:
         if not rows:

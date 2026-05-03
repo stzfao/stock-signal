@@ -25,7 +25,8 @@ class Scope(Enum):
 
 @dataclass(frozen=True)
 class Schedule:
-    staleness_days: int
+    price_staleness_hours: int
+    fundamentals_staleness_days: int
 
 @dataclass(frozen=True)
 class DataStore:

@@ -1,7 +1,8 @@
 # TOML configuration file for the app
 
 [schedule]
-staleness_days = 7
+price_staleness_hours = 4
+fundamentals_staleness_days = 30  # financials + earnings: quarterly cadence
 
 [datastore]
 db_path = "data/stock_signal.duckdb"
@@ -34,5 +35,5 @@ base_url = "https://www.slickcharts.com"
 
 [stockanalysis]
 base_url = "https://stockanalysis.com"
-rpm = 30
-max_conn = 5
+rpm = 60
+max_conn = 10

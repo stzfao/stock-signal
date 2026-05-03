@@ -297,6 +297,21 @@ _SA_DATA_POINTS: dict[str, str] = {
     "fcfPerShare":               "fcf_per_share",           # FCF quality
     "fcfYield":                  "fcf_yield",               # FCF yield
     "netCash":                   "net_cash",                # net cash (negative = net debt)
+    # -- Entry/exit guards --
+    "ma200ch":                   "ma_200_pct",              # % from SMA-200 → mean_reversion_risk
+    "ma50vs200":                 "ma_50_vs_200",            # golden/death cross
+    "peRatio3Y":                 "pe_ratio_3y",             # 3yr avg PE → valuation_penalty
+    "rsi":                       "rsi",                     # RSI 14-day
+    # -- Revision blend --
+    "earningsRevenueEstimateGrowth": "rev_estimate_growth", # revenue revision
+    # -- Earnings proximity + metadata --
+    "nextEarningsDate":          "next_earnings_date",      # binary event flag
+    "sector":                    "sector",                  # sector concentration
+    # -- Enhanced fundamentals --
+    "buybackYield":              "buyback_yield",           # capital return %
+    "epsGrowthQ":                "eps_growth_q",            # QoQ EPS growth (SUE supplement)
+    "sbcByRevenue":              "sbc_by_revenue",          # stock comp dilution quality
+    "pegRatio":                  "peg_ratio",               # growth-adjusted PE
 }
 
 
@@ -382,7 +397,7 @@ class StockAnalysisClient(MClient):
         df.index.name = "symbol"
 
         # Coerce numeric columns; leave analyst_ratings as str
-        str_cols = {"analyst_ratings"}
+        str_cols = {"analyst_ratings", "sector", "next_earnings_date"}
         for col in df.columns:
             if col not in str_cols:
                 df[col] = pd.to_numeric(df[col], errors="coerce")

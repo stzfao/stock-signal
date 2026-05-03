@@ -20,9 +20,10 @@ class SwarmResult:
 
 
 class Swarm:
-    def __init__(self, config: Config, targets: set[str]):
+    def __init__(self, config: Config, targets: set[str], screener_df: pd.DataFrame | None = None):
         self._config = config
         self.targets = targets
+        self._screener_df = screener_df
 
     async def run(self) -> SwarmResult:
         cfg = self._config
@@ -30,15 +31,8 @@ class Swarm:
         skipped = 0
         errors: dict[str, Exception] = {}
 
-        with Store(cfg.datastore.db_path, cfg.schedule.staleness_days) as store:
-            async with (
-                StockAnalysisClient(cfg.stockanalysis) as sa_client,
-                FMPClient(cfg.fmp) as fmp_client,
-            ):
-                sa_task = asyncio.create_task(
-                    sa_client.fetch_screener_data(self.targets)
-                )
-
+        with Store(cfg.datastore.db_path, cfg.schedule) as store:
+            async with FMPClient(cfg.fmp) as fmp_client:
                 ordered = sorted(self.targets)
                 fmp_results = await asyncio.gather(
                     *[self._ingest_symbol(fmp_client, store, sym) for sym in ordered],
@@ -54,7 +48,12 @@ class Swarm:
                     else:
                         skipped += 1
 
-                screener_df = await sa_task
+                # If screener_df was not provided, fetch it now
+                if self._screener_df is None:
+                    async with StockAnalysisClient(cfg.stockanalysis) as sa_client:
+                        screener_df = await sa_client.fetch_screener_data(self.targets)
+                else:
+                    screener_df = self._screener_df
 
         log.info(
             "Swarm complete — refreshed=%d  skipped=%d  errors=%d",
@@ -67,22 +66,34 @@ class Swarm:
             errors=errors,
         )
 
-    async def _ingest_symbol(self, client: FMPClient, store: Store, symbol: str) -> bool:
-        """Fetch and store all FMP data for one symbol. Returns True if refreshed."""
-        if not store.is_stale("prices", symbol):
-            return False
+    @staticmethod
+    async def _ingest_symbol(client: FMPClient, store: Store, symbol: str) -> bool:
+        """Fetch and store FMP data for one symbol. Returns True if any data refreshed.
 
-        prices, income, balance, cashflow, earnings = await asyncio.gather(
-            client.get_daily_prices(symbol),
-            client.get_income_statement(symbol, period="annual", limit=5),
-            client.get_balance_sheet(symbol, period="annual", limit=5),
-            client.get_cash_flow(symbol, period="annual", limit=5),
-            client.get_earnings(symbol, limit=40),
+        Prices are always re-fetched (daily data).
+        Financials and earnings are skipped if fresh within fundamentals_staleness_days.
+        """
+        fundamentals_stale, price_stale = store.is_stale(
+            "financials", symbol,
         )
 
-        store.upsert_prices(symbol, prices)
-        store.upsert_financials(symbol, income, balance, cashflow)
-        store.upsert_earnings_surprises(symbol, earnings)
+        if fundamentals_stale:
+            prices, income, balance, cashflow, earnings = await asyncio.gather(
+                client.get_daily_prices(symbol),
+                client.get_income_statement(symbol, period="annual", limit=5),
+                client.get_balance_sheet(symbol, period="annual", limit=5),
+                client.get_cash_flow(symbol, period="annual", limit=5),
+                client.get_earnings(symbol, limit=40),
+            )
+            store.upsert_prices(symbol, prices)
+            store.upsert_financials(symbol, income, balance, cashflow)
+            store.upsert_earnings_surprises(symbol, earnings)
+            log.debug("FMP full ingest: %s", symbol)
+        elif price_stale:
+            prices = await client.get_daily_prices(symbol)
+            store.upsert_prices(symbol, prices)
+            log.debug("FMP prices-only: %s (fundamentals fresh)", symbol)
+        else:
+            log.debug("FMP no ingestion: %s (fundamentals & prices fresh)", symbol)
 
-        log.debug("FMP ingested: %s", symbol)
         return True

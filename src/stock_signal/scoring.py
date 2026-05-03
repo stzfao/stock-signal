@@ -25,6 +25,10 @@ class FactorWeights:
     asset_growth: float = 0.05
     net_issuance: float = 0.05
     revenue_acceleration: float = 0.05
+    # Tier 2 — valuation & mean-reversion guards
+    mean_reversion_risk: float = -0.08
+    valuation_penalty: float = -0.07
+    momentum_quality: float = 0.05
 
 
 def winsorize(s: pd.Series, lower: float = 0.01, upper: float = 0.99) -> pd.Series:
@@ -71,6 +75,9 @@ def composite_score(
         "asset_growth": weights.asset_growth,
         "net_issuance": weights.net_issuance,
         "revenue_acceleration": weights.revenue_acceleration,
+        "mean_reversion_risk": weights.mean_reversion_risk,
+        "valuation_penalty": weights.valuation_penalty,
+        "momentum_quality": weights.momentum_quality,
     }
 
     # Align all factors to a common index
@@ -79,16 +86,16 @@ def composite_score(
         all_symbols.update(s.index)
     index = pd.Index(sorted(all_symbols))
 
-    # Normalize weights to sum to 1.0 across available factors only
+    # Normalize weights across available factors (abs sum preserves sign)
     active_weights = {
         name: weight_map[name]
         for name in factor_series
-        if name in weight_map and weight_map[name] > 0
+        if name in weight_map and weight_map[name] != 0
     }
-    total_weight = sum(active_weights.values())
-    if total_weight == 0:
+    total_abs = sum(abs(w) for w in active_weights.values())
+    if total_abs == 0:
         return pd.Series(dtype=float)
-    normalized = {name: w / total_weight for name, w in active_weights.items()}
+    normalized = {name: w / total_abs for name, w in active_weights.items()}
 
     composite = pd.Series(0.0, index=index)
 
