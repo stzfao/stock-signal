@@ -1,6 +1,7 @@
 """DuckDB storage layer — class-based Store with SQL loaded from queries.sql."""
 
 import re
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Tuple
@@ -9,6 +10,8 @@ import duckdb
 import pandas as pd
 
 from ..config import Schedule
+
+log = logging.getLogger(__name__)
 
 _SQL_PATH = Path(__file__).parent.parent / "sql" / "queries.sql"
 
@@ -72,7 +75,7 @@ class Store:
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = duckdb.connect(str(self._db_path))
         for name in ("create-prices-table", "create-financials-table",
-                     "create-earnings-surprises-table", "create-analyst-estimates-table"):
+                     "create-earnings-surprises-table", "create-analyst-estimates-table", "create-score-history-table"):
             self._conn.execute(Store._queries[name])
         return self
 
@@ -96,13 +99,15 @@ class Store:
     # ------------------------------------------------------------------
 
     def is_stale(self, table: str, symbol: str) -> Tuple[bool, bool]:
-        fundamentals_cutoff = datetime.now() - timedelta(days=self.fundamentals_staleness_days)
         prices_cutoff = datetime.now() - timedelta(hours=self.price_staleness_hours)
+        fundamentals_cutoff = datetime.now() - timedelta(days=self.fundamentals_staleness_days)
+        log.debug(f"cutoff for prices: {prices_cutoff}, fundamentals: {fundamentals_cutoff}")
 
         row = self.conn.execute(self._q("stale-check", table=table), [symbol]).fetchone()
 
-        is_fundamental_stale =  row is None or row[0] is None or row[0] < fundamentals_cutoff
         is_price_stale = row is None or row[0] is None or row[0] < prices_cutoff
+        is_fundamental_stale =  row is None or row[0] is None or row[0] < fundamentals_cutoff
+        log.debug(f"staleness for prices: {is_price_stale}, fundamentals: {is_fundamental_stale}")
 
         return is_fundamental_stale, is_price_stale
 
@@ -205,6 +210,18 @@ class Store:
         keep = ["date", "estimated_eps_avg", "estimated_eps_high", "estimated_eps_low", "number_analysts_estimated"]
         return self._upsert("analyst_estimates", symbol, df[[c for c in keep if c in df.columns]])
 
+    def save_score_history(self, run_date, ranked_df: pd.DataFrame) -> int:
+        """Save today's ranked output to score_history table."""
+        if ranked_df.empty:
+            return 0
+        from datetime import date as date_type
+        _df = ranked_df[["symbol", "composite_score", "rank", "entry_zone"]].copy()
+        _df["run_date"] = run_date if isinstance(run_date, date_type) else pd.Timestamp(run_date).date()
+        self.conn.register("_df", _df)
+        self.conn.execute(self._q("save-score-history"))
+        self.conn.unregister("_df")
+        return len(_df)
+
     # ------------------------------------------------------------------
     # Loaders
     # ------------------------------------------------------------------
@@ -228,3 +245,13 @@ class Store:
         if symbols:
             return self.conn.execute(self._q("load-analyst-estimates-by-symbol"), [symbols]).df()
         return self.conn.execute(self._q("load-analyst-estimates")).df()
+
+    def load_days_in_top(self, lookback_days: int = 30) -> pd.DataFrame:
+        """Count how many days each symbol appeared in score_history in the last N days."""
+        from datetime import date, timedelta
+        cutoff = date.today() - timedelta(days=lookback_days)
+        return self.conn.execute(self._q("load-score-history-latest"), [cutoff]).df()
+
+    def load_previous_run(self, current_date) -> pd.DataFrame:
+        """Load the most recent run before current_date."""
+        return self.conn.execute(self._q("load-previous-run"), [current_date]).df()

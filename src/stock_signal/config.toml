@@ -1,7 +1,7 @@
 # TOML configuration file for the app
 
 [schedule]
-price_staleness_hours = 10
+price_staleness_hours = 3
 fundamentals_staleness_days = 30  # financials + earnings: quarterly cadence
 
 [datastore]

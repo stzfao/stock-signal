@@ -8,8 +8,8 @@ import pandas as pd
 
 @dataclass
 class FactorWeights:
-    """Default weights for US-long track composite scoring.
-    Weights auto-normalize to sum to 1.0 across active factors.
+    """Factor weights for composite scoring. Signs encode direction: positive = higher is better,
+    negative = higher is penalised. Weights are normalised by absolute sum inside composite_score().
     """
     # tier 0 — original signals
     momentum: float = 0.20
@@ -25,7 +25,11 @@ class FactorWeights:
     net_issuance: float = 0.05
     revenue_acceleration: float = 0.05
 
-    # tier 2 — valuation & mean-reversion guards
+    # tier 2 — quality additions (SA-sourced)
+    roic: float = 0.05
+    fcf_yield: float = 0.05
+
+    # tier 3 — valuation & mean-reversion guards
     mean_reversion_risk: float = -0.08
     valuation_penalty: float = -0.07
     momentum_quality: float = 0.05
@@ -62,22 +66,6 @@ def composite_score(
 
     weight_map = asdict(weights)
 
-    # weight_map = {
-    #     "momentum": weights.momentum,
-    #     "revisions": weights.revisions,
-    #     "sue": weights.sue,
-    #     "fscore": weights.fscore,
-    #     "gross_profitability": weights.gross_profitability,
-    #     "proximity_52wk_high": weights.proximity_52wk_high,
-    #     "accruals": weights.accruals,
-    #     "asset_growth": weights.asset_growth,
-    #     "net_issuance": weights.net_issuance,
-    #     "revenue_acceleration": weights.revenue_acceleration,
-    #     "mean_reversion_risk": weights.mean_reversion_risk,
-    #     "valuation_penalty": weights.valuation_penalty,
-    #     "momentum_quality": weights.momentum_quality,
-    # }
-
     # align all factors to a common index
     all_symbols: set[str] = set()
     for s in factor_series.values():
@@ -97,6 +85,7 @@ def composite_score(
     normalized = {name: w / total_abs for name, w in active_weights.items()}
 
     composite = pd.Series(0.0, index=index)
+    weight_sum = pd.Series(0.0, index=index)
 
     for name, raw in factor_series.items():
         w = normalized.get(name, 0.0)
@@ -104,59 +93,24 @@ def composite_score(
             continue
         aligned = raw.reindex(index)
         winsorized = winsorize(aligned.dropna())
-        zscored = cross_sectional_zscore(winsorized)
-        composite = composite.add(zscored * w, fill_value=0.0)
+        zscored = cross_sectional_zscore(winsorized).reindex(index)
+
+        has_data = zscored.notna()
+        composite = composite.add(zscored.fillna(0.0) * w, fill_value=0.0)
+        weight_sum += has_data.astype(float) * abs(w)
+
+    # rescale by realised weight so all symbols are comparable
+    nonzero = weight_sum > 0
+    composite[nonzero] = composite[nonzero] / weight_sum[nonzero]
+    composite[~nonzero] = np.nan
 
     return composite
-
-
-@dataclass
-class FilterThresholds:
-    """Hard exclusion thresholds."""
-
-    min_market_cap: float = 300_000_000  # $300M
-    min_adv: float = 1_000_000  # $1M average daily volume (dollar)
-    min_altman_z: float = 1.8
-
-
-def apply_hard_filters(
-    scores: pd.Series,
-    metrics: pd.DataFrame,
-    thresholds: FilterThresholds | None = None,
-) -> pd.Series:
-    """Drop stocks failing hard exclusion criteria.
-    :param scores: Composite scores indexed by symbol.
-    :param metrics: DataFrame indexed by symbol with columns:
-                 market_cap, avg_daily_volume, altman_z.
-                 Missing columns are skipped (no filter applied).
-    :param thresholds: Exclusion thresholds.
-    :returns Filtered scores.
-    """
-    if thresholds is None:
-        thresholds = FilterThresholds()
-
-    mask = pd.Series(True, index=scores.index)
-
-    if "market_cap" in metrics.columns:
-        aligned = metrics["market_cap"].reindex(scores.index)
-        mask &= aligned.fillna(0) >= thresholds.min_market_cap
-
-    if "avg_daily_volume" in metrics.columns:
-        aligned = metrics["avg_daily_volume"].reindex(scores.index)
-        mask &= aligned.fillna(0) >= thresholds.min_adv
-
-    if "altman_z" in metrics.columns:
-        aligned = metrics["altman_z"].reindex(scores.index)
-        # if altman_z is missing, don't exclude (benefit of doubt)
-        mask &= aligned.fillna(thresholds.min_altman_z) >= thresholds.min_altman_z
-
-    return scores[mask]
 
 
 def apply_earnings_override(ranked: pd.DataFrame) -> pd.DataFrame:
     """Overrides entry_zone based on proximity to next earnings date.
 
-    Hard block  (≤3 days)  : entry_zone → "pre_earnings_avoid"
+    Hard block  (<=3 days)  : entry_zone -> "pre_earnings_avoid"
     Soft flag   (4–21 days): appends "_earn_risk" to trend_entry / pullback_entry
 
     Requires columns: entry_zone, next_earnings_date.

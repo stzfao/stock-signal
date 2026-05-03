@@ -23,6 +23,7 @@ data/output/
 
 *.swp
 *.html
+!src/stock_signal/templates/daily_report.html
 SIGNALS.md
 TODO.md
 # scratch files for now

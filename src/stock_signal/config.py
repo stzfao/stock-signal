@@ -23,6 +23,10 @@ class Scope(Enum):
     def members(cls):
         return [m.name for m in cls]
 
+    @classmethod
+    def values(cls):
+        return [m.value for m in cls]
+
 @dataclass(frozen=True)
 class Schedule:
     price_staleness_hours: int
@@ -100,21 +104,3 @@ class Config:
             data = tomllib.load(f)
         adapter = TypeAdapter(cls)
         return adapter.validate_python(data)
-
-
-# DB_PATH = PROJECT_ROOT / "data" / "stock_signal.duckdb"
-# OUTPUT_DIR = PROJECT_ROOT / "data" / "output"
-# #
-# FMP_API_KEY: str = os.environ.get("FMP_API_KEY", "")
-# FMP_BASE_URL: str = "https://financialmodelingprep.com/api/v3"
-# FMP_RATE_LIMIT_PER_MIN: int = int(os.getenv("FMP_RATE_LIMIT", "250"))
-# FMP_MAX_CONCURRENT: int = int(os.getenv("FMP_MAX_CONCURRENT", "5"))
-#
-# STALENESS_DAYS: int = 7
-
-# config = Config.new(os.environ["CONFIG_PATH"])
-#
-# print(config.nasdaq.base_url)
-# print(config.nyse.base_url)
-# print(config.nyse.serialized_params)
-# print(config.nyse.params.instrument_type)
