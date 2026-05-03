@@ -1,7 +1,7 @@
 # TOML configuration file for the app
 
 [schedule]
-price_staleness_hours = 4
+price_staleness_hours = 10
 fundamentals_staleness_days = 30  # financials + earnings: quarterly cadence
 
 [datastore]
@@ -34,6 +34,6 @@ limit = 7000
 base_url = "https://www.slickcharts.com"
 
 [stockanalysis]
-base_url = "https://stockanalysis.com"
+base_url = "https://stockanalysis.com/_api/endpoints/screener/data-point"
 rpm = 60
 max_conn = 10

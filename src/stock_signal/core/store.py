@@ -91,21 +91,24 @@ class Store:
         sql = Store._queries[name]
         return sql.format(**fmt) if fmt else sql
 
-    # ------------------------------------------------------------------ #
-    # Staleness                                                            #
-    # ------------------------------------------------------------------ #
+    # ------------------------------------------------------------------
+    # Staleness
+    # ------------------------------------------------------------------
 
     def is_stale(self, table: str, symbol: str) -> Tuple[bool, bool]:
         fundamentals_cutoff = datetime.now() - timedelta(days=self.fundamentals_staleness_days)
         prices_cutoff = datetime.now() - timedelta(hours=self.price_staleness_hours)
+
         row = self.conn.execute(self._q("stale-check", table=table), [symbol]).fetchone()
+
         is_fundamental_stale =  row is None or row[0] is None or row[0] < fundamentals_cutoff
         is_price_stale = row is None or row[0] is None or row[0] < prices_cutoff
+
         return is_fundamental_stale, is_price_stale
 
-    # ------------------------------------------------------------------ #
-    # Upserts                                                              #
-    # ------------------------------------------------------------------ #
+    # ------------------------------------------------------------------
+    # Upserts
+    # ------------------------------------------------------------------
 
     def _upsert(self, table: str, symbol: str, df: pd.DataFrame) -> int:
         """Delete-then-insert a DataFrame for one symbol. Uses DuckDB's BY NAME insert."""
@@ -126,7 +129,10 @@ class Store:
         df = (
             pd.DataFrame(rows)
             .rename(columns={"adjClose": "adj_close"})
-            .assign(adj_close=lambda d: d.get("adj_close", d["close"]))
+            .assign(adj_close=lambda d:
+            d["adj_close"].fillna(d["close"])
+            if "adj_close" in d.columns
+            else d["close"])
         )
         df["date"] = pd.to_datetime(df["date"]).dt.date
         keep = ["date", "open", "high", "low", "close", "adj_close", "volume"]
@@ -171,6 +177,9 @@ class Store:
     def upsert_earnings_surprises(self, symbol: str, rows: list[dict]) -> int:
         if not rows:
             return 0
+
+        # TODO: upsert_earnings_surprises drops estimated_earnings silently
+        #  if it's missing from the incoming rows since it's not in dropna(subset=[])
         df = (
             pd.DataFrame(rows)
             .rename(columns={"epsActual": "actual_earnings_result", "epsEstimated": "estimated_earnings"})
@@ -196,9 +205,9 @@ class Store:
         keep = ["date", "estimated_eps_avg", "estimated_eps_high", "estimated_eps_low", "number_analysts_estimated"]
         return self._upsert("analyst_estimates", symbol, df[[c for c in keep if c in df.columns]])
 
-    # ------------------------------------------------------------------ #
-    # Loaders                                                              #
-    # ------------------------------------------------------------------ #
+    # ------------------------------------------------------------------
+    # Loaders
+    # ------------------------------------------------------------------
 
     def load_prices(self, symbols: list[str] | None = None) -> pd.DataFrame:
         if symbols:

@@ -254,60 +254,56 @@ class NASDAQClient(SClient):
         return await self._request("/stocks", params=self.params)
 
 
-# ---------------------------------------------------------------------------
-# StockAnalysis screener — free, no auth, full universe in one call per metric
-# ---------------------------------------------------------------------------
-
-# All data points fetched on each refresh. Mapped to snake_case column names.
+# collected data points
 _SA_DATA_POINTS: dict[str, str] = {
-    # -- Hard filters --
-    "zScore":                    "altman_z",               # exclude < 1.8
+    # -- hard filters --
+    "zScore":                    "altman_z",                # exclude < 1.8
     "marketCap":                 "market_cap",              # exclude < 300M USD
     "analystCount":              "analyst_count",           # exclude < 3 (micro-cap noise)
     "price":                     "price",                   # exclude < 1.0 (penny stocks)
     "interestCoverage":          "interest_coverage",       # exclude < 1.5 (can't service debt)
-    # -- Price signals: replaces FMP historical price calls --
+    # -- price signals: replaces FMP historical price calls --
     "ch1y":                      "ch_1y",                   # 12-month return
     "ch1m":                      "ch_1m",                   # 1-month return (skip month)
     "positionInRange":           "position_in_range",       # price/52wk_high *100; proximity factor precomputed
     "high52":                    "high_52w",                # 52wk high (raw, for manual calc)
     "dollarVolume":              "dollar_volume",           # replaces pipeline ADV calc
     "relativeVolume":            "relative_volume",         # unusual activity flag
-    # -- Factors: already in signal stack --
+    # -- factors: already in signal stack --
     "fScore":                    "f_score",                 # Piotroski 0-9
     "grossMargin":               "gross_margin",            # gross profitability proxy
     "roa":                       "roa",                     # return on assets
     "roic":                      "roic",                    # quality anchor for US-long track
-    # -- Factors: net issuance (replaces FMP cashflow computation) --
+    # -- factors: net issuance --
     "sharesQoQ":                 "shares_qoq",              # quarterly share dilution %
     "sharesYoY":                 "shares_yoy",              # annual share dilution %
-    # -- Factors: gameplan #1 (analyst conviction) --
+    # -- factors: game-plan #1 (analyst conviction) --
     "priceTargetChange":         "price_target_change",     # % PT revision; highest-ROI addition
-    "analystRatings":            "analyst_ratings",         # Strong Buy → Strong Sell
+    "analystRatings":            "analyst_ratings",         # Strong Buy -> Strong Sell
     "earningsEpsEstimateGrowth": "eps_estimate_growth",     # EPS revision breadth proxy
     "epsNextYear":               "eps_next_year",           # forward EPS
-    # -- Factors: gameplan #2 (valuation-aware momentum) --
+    # -- factors: game-plan #2 (valuation-aware momentum) --
     "evEbitda":                  "ev_ebitda",               # value trend signal
     "peForward":                 "pe_forward",              # forward P/E (better than trailing)
     "peRatio":                   "pe_ratio",                # trailing P/E
-    # -- Factors: Tier 2 --
+    # -- factors: tier 2 --
     "shortFloat":                "short_float",             # % float short
     "shortRatio":                "short_ratio",             # days to cover
     "revenueGrowth":             "revenue_growth",          # YoY revenue %
     "fcfPerShare":               "fcf_per_share",           # FCF quality
     "fcfYield":                  "fcf_yield",               # FCF yield
     "netCash":                   "net_cash",                # net cash (negative = net debt)
-    # -- Entry/exit guards --
-    "ma200ch":                   "ma_200_pct",              # % from SMA-200 → mean_reversion_risk
+    # -- entry/exit guards --
+    "ma200ch":                   "ma_200_pct",              # % from SMA-200 -> mean_reversion_risk
     "ma50vs200":                 "ma_50_vs_200",            # golden/death cross
-    "peRatio3Y":                 "pe_ratio_3y",             # 3yr avg PE → valuation_penalty
+    "peRatio3Y":                 "pe_ratio_3y",             # 3yr avg PE -> valuation_penalty
     "rsi":                       "rsi",                     # RSI 14-day
-    # -- Revision blend --
+    # -- revision blend --
     "earningsRevenueEstimateGrowth": "rev_estimate_growth", # revenue revision
-    # -- Earnings proximity + metadata --
+    # -- earnings proximity + metadata --
     "nextEarningsDate":          "next_earnings_date",      # binary event flag
     "sector":                    "sector",                  # sector concentration
-    # -- Enhanced fundamentals --
+    # -- enhanced fundamentals --
     "buybackYield":              "buyback_yield",           # capital return %
     "epsGrowthQ":                "eps_growth_q",            # QoQ EPS growth (SUE supplement)
     "sbcByRevenue":              "sbc_by_revenue",          # stock comp dilution quality
@@ -316,17 +312,7 @@ _SA_DATA_POINTS: dict[str, str] = {
 
 
 class StockAnalysisClient(MClient):
-    """Async client for stockanalysis.com screener data-point API.
-
-    Fetches all configured metrics in parallel using a single shared session.
-    No auth required — browser impersonation via curl_cffi.
-
-    Usage:
-        async with StockAnalysisClient(config.stockanalysis) as client:
-            df = await client.fetch_screener_data()
-            # df indexed by symbol, columns = snake_case metric names
-    """
-
+    """Async client for stockanalysis.com screener data-point API."""
     def __init__(self, config: StockAnalysis) -> None:
         super().__init__(config)
         self._session: AsyncSession | None = None
@@ -343,31 +329,29 @@ class StockAnalysisClient(MClient):
     async def _fetch_one(self, sa_id: str) -> tuple[str, list[list]]:
         """Fetch a single data-point for the full universe."""
         assert self._session is not None, "client must be used as async context manager"
-        url = f"{self._base_url}/_api/endpoints/screener/data-point"
+
         async with self._limiter:
             async with self._semaphore:
-                resp = await self._session.get(url, params={"type": "s", "id": sa_id})
+                resp = await self._session.get(self._base_url,
+                                               params={"type": "s", "id": sa_id})
         resp.raise_for_status()
+
         data = resp.json()
         if data.get("status") != 200:
-            raise RuntimeError(f"StockAnalysis returned status {data.get('status')} for id={sa_id!r}")
+            raise RuntimeError(f"StockAnalysis returned status "
+                               f"{data.get('status')} for id={sa_id!r}")
+
         rows = data["data"]["data"]
         if not rows:
             log.warning("StockAnalysis: empty response for id=%r", sa_id)
+
         return sa_id, rows
 
-    async def fetch_screener_data(
-        self,
-        symbols: set[str] | None = None,
-    ) -> pd.DataFrame:
+    async def fetch_screener_data(self, symbols: set[str] | None = None) -> pd.DataFrame:
         """Fetch all metrics in parallel, return a DataFrame indexed by symbol.
-
-        Args:
-            symbols: Optional set of symbols to filter to. None = full universe.
-
-        Returns:
-            DataFrame with snake_case columns for every metric in _SA_DATA_POINTS.
-            Rows with no data at all for a symbol are dropped.
+        :param symbols: Optional set of symbols to filter to. None = full universe.
+        :returns: DataFrame with snake_case columns for every metric in _SA_DATA_POINTS.
+                Rows with no data at all for a symbol are dropped.
         """
         results = await asyncio.gather(
             *[self._fetch_one(sa_id) for sa_id in _SA_DATA_POINTS],
@@ -378,7 +362,8 @@ class StockAnalysisClient(MClient):
         for sa_id, col_name in _SA_DATA_POINTS.items():
             result = results[list(_SA_DATA_POINTS).index(sa_id)]
             if isinstance(result, Exception):
-                log.error("StockAnalysis fetch failed for id=%r: %s", sa_id, result)
+                log.error("StockAnalysis fetch failed for id=%r: %s",
+                          sa_id, result)
                 continue
             _, rows = result
             if not rows:
@@ -396,7 +381,7 @@ class StockAnalysisClient(MClient):
         df = pd.DataFrame(series)
         df.index.name = "symbol"
 
-        # Coerce numeric columns; leave analyst_ratings as str
+        # coerce numeric columns; leave analyst_ratings as str
         str_cols = {"analyst_ratings", "sector", "next_earnings_date"}
         for col in df.columns:
             if col not in str_cols:

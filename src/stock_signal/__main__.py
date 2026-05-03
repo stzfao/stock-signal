@@ -10,6 +10,20 @@ from .pipeline import run_us_pipeline
 
 _DEFAULT_CONFIG = Path(__file__).parent / "config.toml"
 
+def _parse_comma_scope(arg_scope):
+    scope = [s.strip() for s in arg_scope.split(',')]
+    output_enums = []
+
+    for s in scope:
+        try:
+            output_enums.append(Scope(s))
+        except ValueError:
+            allowed = [s.value for s in Scope]
+            raise argparse.ArgumentTypeError(
+                f"invalid choice: '{s}' (choose from {', '.join(allowed)})"
+            )
+
+    return output_enums
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Stock Signal Engine")
@@ -18,7 +32,8 @@ def main() -> None:
         help="Override universe with specific symbols (e.g. --symbols AAPL MSFT)",
     )
     parser.add_argument(
-        "--scope", nargs="+",
+        "--scope",
+        type=_parse_comma_scope,
         default=[Scope.SP500.value],
         choices=[s.value for s in Scope],
         help="Universe scope (default: sp500)",

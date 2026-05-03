@@ -8,6 +8,7 @@ from .revenue_accel import revenue_acceleration
 from .revisions import eps_revision_breadth
 from .sue import sue
 from .momentum_quality import momentum_quality
+from .guards import valuation_penalty
 
 __all__ = [
     "accruals",
@@ -21,4 +22,5 @@ __all__ = [
     "eps_revision_breadth",
     "sue",
     "momentum_quality",
+    "valuation_penalty",
 ]
