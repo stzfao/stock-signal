@@ -13,13 +13,10 @@ def eps_revision_breadth(
 
     Breadth = (# up revisions - # down revisions) / total revisions
 
-    Args:
-        analyst_estimates: DataFrame with [symbol, date, estimated_eps_avg],
+    :param analyst_estimates: DataFrame with [symbol, date, estimated_eps_avg],
                           sorted by (symbol, date).
-        window_days: Lookback window in calendar days.
-
-    Returns:
-        Series indexed by symbol, values in [-1, 1].
+    :param window_days: Lookback window in calendar days.
+    :returns: Series indexed by symbol, values in [-1, 1].
     """
     cutoff = pd.Timestamp.now() - pd.Timedelta(days=window_days)
     result: dict[str, float] = {}
@@ -28,15 +25,14 @@ def eps_revision_breadth(
         group = group.sort_values("date")
         group = group.dropna(subset=["estimated_eps_avg"])
 
-        # Ensure date is comparable Timestamp type
-        dates = pd.to_datetime(group["date"])
-        mask = dates >= cutoff
-        window_data = group[mask] if mask.any() else group.tail(4)
-
+        # ensure date is comparable Timestamp type
+        group = group.copy()
+        group["date"] = pd.to_datetime(group["date"])
+        window_data = group[group["date"] >= cutoff]
         if len(window_data) < 2:
             continue
 
-        # Compute changes between consecutive estimates
+        # compute changes between consecutive estimates
         changes = window_data["estimated_eps_avg"].diff().dropna()
 
         if len(changes) == 0:
@@ -47,8 +43,8 @@ def eps_revision_breadth(
         total = up + down
 
         if total == 0:
-            result[symbol] = 0.0
+            result[str(symbol)] = 0.0
         else:
-            result[symbol] = (up - down) / total
+            result[str(symbol)] = (up - down) / total
 
     return pd.Series(result, dtype=float)

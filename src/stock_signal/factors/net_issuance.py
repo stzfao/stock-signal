@@ -2,18 +2,13 @@
 
 import pandas as pd
 
-
 def net_issuance(financials: pd.DataFrame) -> pd.Series:
     """Compute net issuance = (shares_t / shares_t-1) - 1.
-
     INVERTED: returns negated values so higher = better (buybacks = bullish).
 
-    Args:
-        financials: DataFrame with columns [symbol, date, shares_outstanding],
+    :param financials: DataFrame with columns [symbol, date, shares_outstanding],
                     at least 2 annual filings per symbol.
-
-    Returns:
-        Series indexed by symbol. Higher values = more buybacks = better.
+    :returns: Series indexed by symbol. Higher values = more buybacks = better.
     """
     df = financials.sort_values(["symbol", "date"])
     result: dict[str, float] = {}
@@ -22,14 +17,14 @@ def net_issuance(financials: pd.DataFrame) -> pd.Series:
         if len(group) < 2:
             continue
 
-        curr = group.iloc[-1]["shares_outstanding"]
-        prev = group.iloc[-2]["shares_outstanding"]
+        curr = group["shares_outstanding"].iloc[-1]
+        prev = group["shares_outstanding"].iloc[-2]
 
-        if prev is None or prev == 0 or curr is None:
+        if pd.isna(prev) or prev == 0 or pd.isna(curr):
             continue
 
         issuance = (curr / prev) - 1.0
-        # Negate: buybacks (negative issuance) are bullish
-        result[symbol] = -issuance
+        # negate: buybacks (so negative issuance) are bullish
+        result[str(symbol)] = -issuance
 
     return pd.Series(result, dtype=float)

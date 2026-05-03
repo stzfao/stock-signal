@@ -7,6 +7,7 @@ import pandas as pd
 def momentum_quality(prices_df: pd.DataFrame) -> pd.Series:
     """Sharpe-like ratio: 1-month return / 3-month annualised volatility.
     Rewards smooth, low-vol momentum; punishes spike-then-fade patterns.
+
     :param prices_df: DataFrame with columns [symbol, date, close], sorted by date.
     :returns: Series indexed by symbol with momentum quality scores.
     """

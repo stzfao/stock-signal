@@ -8,12 +8,9 @@ def accruals(financials: pd.DataFrame) -> pd.Series:
 
     INVERTED: returns negated values so higher = better (low accruals = bullish).
 
-    Args:
-        financials: DataFrame with columns [symbol, date, net_income,
+    :param financials: DataFrame with columns [symbol, date, net_income,
                     operating_cash_flow, total_assets], period='FY'.
-
-    Returns:
-        Series indexed by symbol. Higher values = lower accruals = better.
+    :returns: Series indexed by symbol. Higher values = lower accruals = better.
     """
     latest = financials.sort_values("date").groupby("symbol").last()
 
@@ -23,5 +20,5 @@ def accruals(financials: pd.DataFrame) -> pd.Series:
 
     raw = (ni - cfo) / ta
 
-    # Negate: low accruals (cash earnings >> reported) is bullish
+    # negate: low accruals (cash earnings >> reported) is bullish
     return (-raw).dropna()
